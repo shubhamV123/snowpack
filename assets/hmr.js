@@ -86,6 +86,7 @@ export function createHotContext(fullUrl) {
   const existing = REGISTERED_MODULES[id];
   if (existing) {
     existing.lock();
+    runUpdate(id);
     return existing;
   }
   const state = new HotModuleState(id);
@@ -101,11 +102,6 @@ async function applyUpdate(id) {
     return false;
   }
   const acceptCallbacks = state.acceptCallbacks;
-  const disposeCallbacks = state.disposeCallbacks;
-  state.disposeCallbacks = [];
-  state.data = {};
-  disposeCallbacks.map((callback) => callback());
-  const updateID = Date.now();
   for (const {deps, callback: acceptCallback} of acceptCallbacks) {
     const [module, ...depModules] = await Promise.all([
       import(id + `?mtime=${updateID}`),
@@ -113,6 +109,20 @@ async function applyUpdate(id) {
     ]);
     acceptCallback({module, deps: depModules});
   }
+  return true;
+}
+async function runUpdate(id) {
+  const state = REGISTERED_MODULES[id];
+  if (!state) {
+    return false;
+  }
+  if (state.isDeclined) {
+    return false;
+  }
+  const disposeCallbacks = state.disposeCallbacks;
+  state.disposeCallbacks = [];
+  state.data = {};
+  disposeCallbacks.map((callback) => callback());
   return true;
 }
 socket.addEventListener('message', ({data: _data}) => {
